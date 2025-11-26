@@ -1,0 +1,79 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+  }
+
+  body {
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
+    font-size: 14px;
+  }
+
+  #root {
+    min-height: 100vh;
+  }
+}
+
+@layer components {
+  /* Modern button like NetPulse */
+  .btn-primary {
+    background-color: #3182ce;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 16px;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+
+  .btn-primary:hover:not(:disabled) {
+    background-color: #2c5282;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  }
+
+  .btn-primary:active:not(:disabled) {
+    background-color: #2a4365;
+  }
+
+  .btn-primary:disabled {
+    background-color: #cbd5e0;
+    color: #a0aec0;
+  }
+
+  /* Clean card/window - no background colors, use Tailwind classes in components */
+  .irc-window {
+    border-radius: 8px;
+  }
+
+  /* Modern input field - no background colors, use Tailwind classes in components */
+  .irc-input {
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 14px;
+    transition: all 0.2s;
+  }
+
+  .irc-input:focus {
+    outline: none;
+  }
+
+  /* Clean title bar - no background colors, use Tailwind classes in components */
+  .mirc-titlebar {
+    padding: 8px 12px;
+    font-weight: 600;
+    font-size: 13px;
+    border-radius: 8px 8px 0 0;
+  }
+
+  /* Soft panel - no background colors, use Tailwind classes in components */
+  .mirc-panel {
+    border-radius: 6px;
+  }
+}
