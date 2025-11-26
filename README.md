@@ -1,13 +1,17 @@
-# Mastodon Client
+# FediWire
 
-A modern, clean three-column Mastodon client built with React, TypeScript, and Tailwind CSS. Features a discovery-focused experience with enhanced tag browsing and account suggestions.
+An IRC-style Mastodon client built with React, TypeScript, and Tailwind CSS. Features real-time WebSocket streaming, read/unread tracking, and a familiar IRC aesthetic.
 
 ## Features
 
+- **IRC-Style Interface**: Familiar IRC aesthetic with mIRC-inspired color scheme
+- **Real-Time Updates**: WebSocket streaming for instant timeline updates (no polling!)
+- **Read/Unread Tracking**: Visual indicators and dividers to show where you left off
 - **Three-Column Layout**: Clean, responsive UI with navigation, timeline, and discovery sidebars
 - **OAuth Authentication**: Secure login flow with any Mastodon instance
 - **Timeline Features**:
   - Home, Local, and Federated timelines
+  - Real-time WebSocket streaming
   - Post composition with media, polls, and content warnings
   - Favorite, boost, bookmark, and reply to posts
   - Client-side filtering (all, media, links, threads)
@@ -16,6 +20,9 @@ A modern, clean three-column Mastodon client built with React, TypeScript, and T
   - Followed tags quick access
   - Suggested accounts
   - Instance status and health monitoring
+- **Developer Experience**:
+  - Development mode banner
+  - Dark/light theme support
 - **Responsive Design**:
   - Desktop-first with mobile support
   - Hides sidebars on smaller screens (<800px, <1040px)
