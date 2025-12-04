@@ -1,7 +1,7 @@
 import { useStore } from '../../store/useStore';
 
 export default function TopBar() {
-  const { currentAccount, instanceUrl, notifications, theme, toggleTheme, logout, setShowNotifications, lastReadNotificationId } = useStore();
+  const { currentAccount, instanceUrl, notifications, theme, fontSize, toggleTheme, setFontSize, logout, setShowNotifications, lastReadNotificationId } = useStore();
 
   // Count unread notifications (newer than last read)
   const unreadCount = notifications.findIndex(n => n.id === lastReadNotificationId);
@@ -33,6 +33,16 @@ export default function TopBar() {
               </span>
             )}
           </button>
+          <select
+            value={fontSize}
+            onChange={(e) => setFontSize(e.target.value as 'small' | 'medium' | 'large')}
+            className="px-2 py-1 text-[11px] text-mirc-gray dark:text-gray-400 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded hover:text-mirc-text dark:hover:text-white transition-colors"
+            title="Font size"
+          >
+            <option value="small">A-</option>
+            <option value="medium">A</option>
+            <option value="large">A+</option>
+          </select>
           <button
             onClick={toggleTheme}
             className="px-2 py-1 text-[11px] text-mirc-gray dark:text-gray-400 hover:text-mirc-text dark:hover:text-white transition-colors"

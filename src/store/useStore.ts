@@ -4,6 +4,7 @@ import type { Account, Status, Tag, Notification, Instance } from '../types';
 export type TimelineType = 'home' | 'local' | 'federated' | 'tag';
 export type FilterType = 'all' | 'media' | 'links' | 'threads';
 export type Theme = 'light' | 'dark';
+export type FontSize = 'small' | 'medium' | 'large';
 
 interface AppState {
   // Authentication
@@ -16,6 +17,7 @@ interface AppState {
   currentTag: string | null;
   activeFilter: FilterType;
   theme: Theme;
+  fontSize: FontSize;
   replyingTo: Status | null;
   showNotifications: boolean;
   lastReadNotificationId: string | null;
@@ -40,12 +42,14 @@ interface AppState {
   setActiveFilter: (filter: FilterType) => void;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
+  setFontSize: (size: FontSize) => void;
   setReplyingTo: (status: Status | null) => void;
   setShowNotifications: (show: boolean) => void;
   markNotificationsAsRead: () => void;
   markTimelineAsRead: () => void;
   setTimeline: (statuses: Status[]) => void;
   addToTimeline: (statuses: Status[]) => void;
+  appendToTimeline: (status: Status) => void;
   updateStatus: (statusId: string, updates: Partial<Status>) => void;
   removeFromTimeline: (statusId: string) => void;
   setNotifications: (notifications: Notification[]) => void;
@@ -66,6 +70,7 @@ export const useStore = create<AppState>((set) => ({
   currentTag: null,
   activeFilter: 'all',
   theme: (localStorage.getItem('theme') as Theme) || 'light',
+  fontSize: (localStorage.getItem('fontSize') as FontSize) || 'medium',
   replyingTo: null,
   showNotifications: false,
   lastReadNotificationId: localStorage.getItem('lastReadNotificationId'),
@@ -120,6 +125,11 @@ export const useStore = create<AppState>((set) => ({
       return { theme: newTheme };
     }),
 
+  setFontSize: (size) => {
+    localStorage.setItem('fontSize', size);
+    set({ fontSize: size });
+  },
+
   setReplyingTo: (status) => set({ replyingTo: status }),
 
   setShowNotifications: (show) => set({ showNotifications: show }),
@@ -138,7 +148,7 @@ export const useStore = create<AppState>((set) => ({
     set((state) => {
       if (state.timeline.length > 0) {
         // Get the most recent status (last item since timeline is oldest to newest)
-        const latestId = state.timeline[state.timeline.length - 1].id;
+        const latestId = state.timeline[0].id;
         return { lastReadStatusId: latestId };
       }
       return state;
@@ -150,6 +160,18 @@ export const useStore = create<AppState>((set) => ({
     set((state) => ({
       timeline: [...statuses, ...state.timeline]
     })),
+
+  appendToTimeline: (status) =>
+    set((state) => {
+      // Check if status already exists in timeline to prevent duplicates
+      const exists = state.timeline.some(s => s.id === status.id);
+      if (exists) {
+        return state; // Don't add duplicate
+      }
+      return {
+        timeline: [status, ...state.timeline]
+      };
+    }),
 
   updateStatus: (statusId, updates) =>
     set((state) => ({

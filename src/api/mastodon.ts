@@ -165,9 +165,25 @@ export class MastodonAPI {
     return this.fetch<Status>(`/api/v1/statuses/${id}`);
   }
 
+  async getStatusContext(id: string): Promise<{ ancestors: Status[]; descendants: Status[] }> {
+    return this.fetch<{ ancestors: Status[]; descendants: Status[] }>(`/api/v1/statuses/${id}/context`);
+  }
+
   async deleteStatus(id: string): Promise<Status> {
     return this.fetch<Status>(`/api/v1/statuses/${id}`, {
       method: 'DELETE',
+    });
+  }
+
+  async editStatus(id: string, params: {
+    status: string;
+    spoiler_text?: string;
+    sensitive?: boolean;
+    media_ids?: string[];
+  }): Promise<Status> {
+    return this.fetch<Status>(`/api/v1/statuses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(params),
     });
   }
 
@@ -325,33 +341,47 @@ export class MastodonAPI {
       params.append('tag', tag);
     }
 
-    const ws = new WebSocket(`${streamUrl}?${params.toString()}`);
+    const wsUrl = `${streamUrl}?${params.toString()}`;
+    console.log('[WebSocket] Connecting to:', wsUrl.replace(/access_token=[^&]+/, 'access_token=***'));
+
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      console.log('[WebSocket] Connection opened for stream:', stream);
+    };
 
     ws.onmessage = (event) => {
+      console.log('[WebSocket] Received message:', event.data);
       try {
         const data = JSON.parse(event.data);
 
         if (data.event === 'update') {
+          console.log('[WebSocket] Received update event');
           const status = JSON.parse(data.payload);
+          console.log('[WebSocket] New status:', status.id, 'from', status.account.username);
           onUpdate(status);
         } else if (data.event === 'delete' && onDelete) {
+          console.log('[WebSocket] Received delete event:', data.payload);
           onDelete(data.payload);
+        } else {
+          console.log('[WebSocket] Other event:', data.event);
         }
       } catch (error) {
-        console.error('Error parsing streaming message:', error);
+        console.error('[WebSocket] Error parsing streaming message:', error);
       }
     };
 
     ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
+      console.error('[WebSocket] Error:', error);
     };
 
-    ws.onclose = () => {
-      console.log('WebSocket connection closed');
+    ws.onclose = (event) => {
+      console.log('[WebSocket] Connection closed. Code:', event.code, 'Reason:', event.reason);
     };
 
     // Return cleanup function
     return () => {
+      console.log('[WebSocket] Closing connection');
       ws.close();
     };
   }

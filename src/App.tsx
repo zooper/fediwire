@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import TopBar from './components/topbar/TopBar';
 import LeftSidebar from './components/sidebar-left/LeftSidebar';
 import RightSidebar from './components/sidebar-right/RightSidebar';
@@ -6,10 +6,13 @@ import Composer from './components/composer/Composer';
 import Timeline from './components/timeline/Timeline';
 import Login from './components/auth/Login';
 import NotificationsPanel from './components/notifications/NotificationsPanel';
+import KeyboardShortcutsHelp from './components/help/KeyboardShortcutsHelp';
 import { useStore } from './store/useStore';
 import { getAPI } from './api/mastodon';
 import { useMockData } from './hooks/useMockData';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import type { Status } from './types';
+import { VERSION_INFO } from './version';
 
 function App() {
   const {
@@ -18,15 +21,93 @@ function App() {
     currentAccount,
     currentTimeline,
     currentTag,
-    timeline,
     theme,
+    showNotifications,
     setCurrentAccount,
     setTimeline,
+    appendToTimeline,
+    removeFromTimeline,
     setTrendingTags,
     setFollowedTags,
     setInstance,
-    setLoadingTimeline
+    setLoadingTimeline,
+    setCurrentTimeline,
+    setShowNotifications,
+    toggleTheme,
   } = useStore();
+
+  const [showHelp, setShowHelp] = useState(false);
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts([
+    {
+      key: '?',
+      handler: () => setShowHelp(true),
+      description: 'Show keyboard shortcuts help',
+    },
+    {
+      key: 'Escape',
+      handler: () => {
+        setShowHelp(false);
+        setShowNotifications(false);
+      },
+      description: 'Close modals',
+    },
+    {
+      key: 'c',
+      handler: () => {
+        // Focus composer
+        const textarea = document.querySelector('textarea[placeholder*="toot"]') as HTMLTextAreaElement;
+        if (textarea) {
+          textarea.focus();
+          // Scroll to composer
+          textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      },
+      description: 'Compose new post',
+    },
+    {
+      key: '/',
+      handler: () => {
+        // Focus search
+        const searchInput = document.querySelector('input[type="search"]') as HTMLInputElement;
+        if (searchInput) {
+          searchInput.focus();
+        }
+      },
+      description: 'Focus search',
+    },
+    {
+      key: 'h',
+      handler: () => setCurrentTimeline('home'),
+      description: 'Go to home timeline',
+    },
+    {
+      key: 'l',
+      handler: () => setCurrentTimeline('local'),
+      description: 'Go to local timeline',
+    },
+    {
+      key: 'f',
+      handler: () => setCurrentTimeline('federated'),
+      description: 'Go to federated timeline',
+    },
+    {
+      key: 'n',
+      handler: () => setShowNotifications(!showNotifications),
+      description: 'Toggle notifications',
+    },
+    {
+      key: 't',
+      handler: () => toggleTheme(),
+      description: 'Toggle theme',
+    },
+    {
+      key: 'r',
+      handler: () => window.location.reload(),
+      description: 'Refresh page',
+    },
+  ], !showHelp); // Disable shortcuts when help is showing
 
   // Apply theme to document
   useEffect(() => {
@@ -101,44 +182,64 @@ function App() {
 
   // Stream real-time updates
   useEffect(() => {
-    if (!accessToken || !instanceUrl || !currentAccount || timeline.length === 0) return;
+    if (!accessToken || !instanceUrl || !currentAccount) return;
 
-    const api = getAPI(instanceUrl, accessToken);
+    // Add a small delay to avoid rapid reconnections in React Strict Mode
+    let isMounted = true;
+    let cleanup: (() => void) | null = null;
 
-    // Determine which stream to connect to
-    let streamType: 'user' | 'public' | 'public:local' | 'hashtag' | 'hashtag:local';
-    let tag: string | undefined;
+    const connect = () => {
+      if (!isMounted) return;
 
-    if (currentTimeline === 'home') {
-      streamType = 'user';
-    } else if (currentTimeline === 'local') {
-      streamType = 'public:local';
-    } else if (currentTimeline === 'federated') {
-      streamType = 'public';
-    } else if (currentTimeline === 'tag' && currentTag) {
-      streamType = 'hashtag';
-      tag = currentTag;
-    } else {
-      return; // Unknown timeline type
-    }
+      const api = getAPI(instanceUrl, accessToken);
 
-    // Connect to streaming API
-    const cleanup = api.streamTimeline(
-      streamType,
-      (newStatus: Status) => {
-        // Add new status to the end of the timeline (bottom)
-        setTimeline([...timeline, newStatus]);
-      },
-      (deletedId: string) => {
-        // Remove deleted status from timeline
-        setTimeline(timeline.filter((s: Status) => s.id !== deletedId));
-      },
-      tag
-    );
+      // Determine which stream to connect to
+      let streamType: 'user' | 'public' | 'public:local' | 'hashtag' | 'hashtag:local';
+      let tag: string | undefined;
+
+      if (currentTimeline === 'home') {
+        streamType = 'user';
+      } else if (currentTimeline === 'local') {
+        streamType = 'public:local';
+      } else if (currentTimeline === 'federated') {
+        streamType = 'public';
+      } else if (currentTimeline === 'tag' && currentTag) {
+        streamType = 'hashtag';
+        tag = currentTag;
+      } else {
+        return; // Unknown timeline type
+      }
+
+      console.log('[App] Starting WebSocket connection for timeline:', currentTimeline);
+
+      // Connect to streaming API
+      cleanup = api.streamTimeline(
+        streamType,
+        (newStatus: Status) => {
+          console.log('[App] Received new status via WebSocket:', newStatus.id);
+          appendToTimeline(newStatus);
+        },
+        (deletedId: string) => {
+          console.log('[App] Received delete via WebSocket:', deletedId);
+          removeFromTimeline(deletedId);
+        },
+        tag
+      );
+    };
+
+    // Small delay to avoid rapid reconnections during React Strict Mode double-mounting
+    const timeout = setTimeout(connect, 100);
 
     // Cleanup on unmount or when dependencies change
-    return cleanup;
-  }, [accessToken, instanceUrl, currentAccount, currentTimeline, currentTag, setTimeline, timeline.length]);
+    return () => {
+      console.log('[App] Cleaning up WebSocket connection');
+      isMounted = false;
+      clearTimeout(timeout);
+      if (cleanup) {
+        cleanup();
+      }
+    };
+  }, [accessToken, instanceUrl, currentAccount, currentTimeline, currentTag, appendToTimeline, removeFromTimeline]);
 
   // Show login screen if not authenticated
   if (!accessToken || !instanceUrl) {
@@ -177,6 +278,14 @@ function App() {
 
       {/* Notifications modal */}
       <NotificationsPanel />
+
+      {/* Keyboard shortcuts help */}
+      {showHelp && <KeyboardShortcutsHelp onClose={() => setShowHelp(false)} />}
+
+      {/* Version footer */}
+      <footer className="text-center py-2 text-[9px] text-mirc-gray dark:text-gray-600">
+        FediWire v{VERSION_INFO.hash} · Built {new Date(VERSION_INFO.buildDate).toLocaleString()}
+      </footer>
     </div>
   );
 }

@@ -1,19 +1,31 @@
 import { useStore } from '../../store/useStore';
 import Post from '../post/Post';
-import { useRef, useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { getAPI } from '../../api/mastodon';
 
 export default function Timeline() {
-  const { timeline, isLoadingTimeline, currentTimeline, currentTag, accessToken, instanceUrl, lastReadStatusId, setTimeline, markTimelineAsRead } = useStore();
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const { timeline, isLoadingTimeline, currentTimeline, currentTag, accessToken, instanceUrl, lastReadStatusId, addToTimeline, markTimelineAsRead } = useStore();
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
-  // Scroll to bottom when timeline changes
+  // No auto-scroll needed when newest is on top
+
+  // Infinite scroll: load more when scrolling near bottom
   useEffect(() => {
-    if (messagesEndRef.current && timeline.length > 0) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
-    }
-  }, [timeline.length]);
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const { scrollTop, scrollHeight, clientHeight } = container;
+      // Trigger load more when within 200px of bottom
+      if (scrollHeight - scrollTop - clientHeight < 200 && !isLoadingMore && timeline.length > 0) {
+        loadMore();
+      }
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [timeline.length, isLoadingMore]);
 
   // Mark timeline as read when page becomes visible
   useEffect(() => {
@@ -40,7 +52,8 @@ export default function Timeline() {
     setIsLoadingMore(true);
     try {
       const api = getAPI(instanceUrl, accessToken);
-      const oldestId = timeline[0].id; // Oldest post is at index 0 (before reverse)
+      // Get the oldest post (last item in array since newest is first)
+      const oldestId = timeline[timeline.length - 1].id;
 
       const olderStatuses = await (async () => {
         if (currentTimeline === 'home') {
@@ -56,7 +69,8 @@ export default function Timeline() {
       })();
 
       if (olderStatuses.length > 0) {
-        setTimeline([...olderStatuses, ...timeline]);
+        // Add older statuses to the timeline (they will be appended to the end)
+        addToTimeline(olderStatuses);
       }
     } catch (error) {
       console.error('Failed to load more:', error);
@@ -81,7 +95,7 @@ export default function Timeline() {
       </div>
 
       {/* Messages area */}
-      <div className="flex-1 overflow-y-auto p-1 bg-white dark:bg-gray-900">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-1 bg-white dark:bg-gray-900">
         {isLoadingTimeline ? (
           <div className="text-mirc-gray dark:text-gray-400 text-center p-4 text-[11px]">
             * Loading messages...
@@ -92,17 +106,17 @@ export default function Timeline() {
           </div>
         ) : (
           <>
-            {[...timeline].reverse().map((status, index, array) => {
+            {timeline.map((status, index) => {
               // Find if this is the last read post
               const isLastRead = lastReadStatusId === status.id;
               // Check if this post is unread (comes after the last read post)
               const isUnread = lastReadStatusId
-                ? timeline.findIndex(s => s.id === status.id) > timeline.findIndex(s => s.id === lastReadStatusId)
+                ? timeline.findIndex(s => s.id === status.id) < timeline.findIndex(s => s.id === lastReadStatusId)
                 : false;
 
               return (
                 <div key={status.id}>
-                  {isLastRead && index < array.length - 1 && (
+                  {isLastRead && index > 0 && (
                     <div className="flex items-center gap-2 py-1 px-1">
                       <div className="flex-1 border-t-2 border-mirc-blue dark:border-blue-500"></div>
                       <span className="text-[9px] text-mirc-blue dark:text-blue-400 font-mirc">New messages</span>
@@ -113,7 +127,11 @@ export default function Timeline() {
                 </div>
               );
             })}
-            <div ref={messagesEndRef} />
+            {isLoadingMore && (
+              <div className="text-mirc-gray dark:text-gray-400 text-center p-2 text-[11px]">
+                * Loading more messages...
+              </div>
+            )}
           </>
         )}
       </div>

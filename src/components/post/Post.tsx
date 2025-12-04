@@ -1,7 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { Status } from '../../types';
 import { useStore } from '../../store/useStore';
 import Profile from '../profile/Profile';
+import LinkPreview from './LinkPreview';
+import ThreadView from '../thread/ThreadView';
 
 interface PostProps {
   status: Status;
@@ -9,34 +11,21 @@ interface PostProps {
 }
 
 export default function Post({ status, isUnread = false }: PostProps) {
-  const { currentAccount, updateStatus, removeFromTimeline, accessToken, instanceUrl, setReplyingTo } = useStore();
+  const { currentAccount, updateStatus, removeFromTimeline, accessToken, instanceUrl, setReplyingTo, fontSize } = useStore();
   const [showProfile, setShowProfile] = useState(false);
-  const [showMenu, setShowMenu] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const [showLinkPreview, setShowLinkPreview] = useState(false);
+  const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
+  const [showThreadView, setShowThreadView] = useState(false);
+  const postRef = useRef<HTMLDivElement>(null);
 
   const displayStatus = status.reblog || status;
   const isReblog = !!status.reblog;
   const isOwnPost = currentAccount?.id === displayStatus.account.id;
   const images = displayStatus.media_attachments.filter(m => m.type === 'image');
-
-  // Close menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowMenu(false);
-      }
-    };
-
-    if (showMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showMenu]);
+  const isPartOfThread = displayStatus.in_reply_to_id || displayStatus.replies_count > 0;
 
   const handleFavourite = () => {
     updateStatus(status.id, {
@@ -82,9 +71,44 @@ export default function Post({ status, isUnread = false }: PostProps) {
     }
   };
 
+  const [editContent, setEditContent] = useState('');
+  const [editSpoilerText, setEditSpoilerText] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showEditComposer, setShowEditComposer] = useState(false);
+
   const handleEdit = () => {
-    // For now, just show an alert. Full edit UI would require a modal with the composer
-    alert('Edit functionality coming soon! For now, you can delete and repost.');
+    // Extract plain text from HTML content
+    const tmp = document.createElement('div');
+    tmp.innerHTML = displayStatus.content;
+    const plainText = tmp.textContent || tmp.innerText || '';
+
+    setEditContent(plainText);
+    setEditSpoilerText(displayStatus.spoiler_text);
+    setShowEditModal(false);
+    setShowEditComposer(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editContent.trim() || isSubmitting) return;
+
+    setIsSubmitting(true);
+    try {
+      const { getAPI } = await import('../../api/mastodon');
+      const api = getAPI(instanceUrl!, accessToken!);
+      const updatedStatus = await api.editStatus(displayStatus.id, {
+        status: editContent,
+        spoiler_text: editSpoilerText || undefined,
+      });
+
+      // Update the status in the timeline
+      updateStatus(status.id, updatedStatus);
+      setShowEditComposer(false);
+    } catch (error) {
+      console.error('Failed to edit:', error);
+      alert('Failed to edit post. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const formatTime = (dateString: string) => {
@@ -178,9 +202,86 @@ export default function Post({ status, isUnread = false }: PostProps) {
     return colors[hash % colors.length];
   };
 
+  // Extract first URL from post content
+  const getFirstUrl = (html: string): string | null => {
+    const tmp = document.createElement('div');
+    tmp.innerHTML = html;
+    const links = tmp.querySelectorAll('a');
+
+    for (const link of Array.from(links)) {
+      const href = link.getAttribute('href');
+      if (href && (href.startsWith('http://') || href.startsWith('https://'))) {
+        // Skip mentions and hashtags
+        const classes = link.className || '';
+        if (!classes.includes('mention') && !classes.includes('hashtag')) {
+          return href;
+        }
+      }
+    }
+    return null;
+  };
+
+  const handleMouseEnter = () => {
+    // Check if post has a card OR contains any links
+    const hasCard = !!displayStatus.card;
+    const firstUrl = getFirstUrl(displayStatus.content);
+
+    if (hasCard || firstUrl) {
+      const rect = postRef.current?.getBoundingClientRect();
+      if (rect) {
+        setPreviewPosition({
+          x: rect.right,
+          y: rect.top + rect.height / 2,
+        });
+      }
+      setShowLinkPreview(true);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setShowLinkPreview(false);
+  };
+
+  // Get font size classes
+  const getFontSizeClasses = () => {
+    switch (fontSize) {
+      case 'small':
+        return 'text-[10px]';
+      case 'large':
+        return 'text-[14px]';
+      default: // medium
+        return 'text-[12px]';
+    }
+  };
+
+  // Handle ESC key to close modals
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (showImageModal) {
+          setShowImageModal(false);
+        } else if (showEditModal) {
+          setShowEditModal(false);
+        } else if (showEditComposer) {
+          setShowEditComposer(false);
+        }
+      }
+    };
+
+    if (showImageModal || showEditModal || showEditComposer) {
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [showImageModal, showEditModal, showEditComposer]);
+
   return (
     <>
-      <div className={`text-[12px] py-0.5 px-1 font-mirc leading-tight ${isUnread ? 'border-l-2 border-mirc-blue dark:border-blue-500 bg-blue-50/20 dark:bg-blue-950/20' : ''}`}>
+      <div
+        ref={postRef}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        className={`${getFontSizeClasses()} py-0.5 px-1 font-mirc leading-tight ${isUnread ? 'border-l-2 border-mirc-blue dark:border-blue-500 bg-blue-50/20 dark:bg-blue-950/20' : ''}`}
+      >
         {/* Reblog indicator */}
         {isReblog && (
           <div className="text-mirc-purple text-[10px] mb-0.5">
@@ -209,6 +310,10 @@ export default function Post({ status, isUnread = false }: PostProps) {
         {/* Message content */}
         <div className="flex-1 min-w-0 flex items-start gap-2">
           <div className="flex-1">
+            {/* Reply indicator */}
+            {displayStatus.in_reply_to_id && (
+              <span className="text-mirc-gray dark:text-gray-500 mr-1">↪</span>
+            )}
             <span className="text-mirc-text dark:text-gray-200 break-words pl-1">{renderContent(displayStatus.content)}</span>
 
             {/* Tags */}
@@ -244,7 +349,27 @@ export default function Post({ status, isUnread = false }: PostProps) {
           </div>
 
           {/* Action buttons - always visible, styled subtly */}
-          <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
+          <div className="flex items-start gap-1.5 ml-2 flex-shrink-0 pt-0.5">
+            {/* Edit button for own posts */}
+            {isOwnPost && (
+              <button
+                onClick={() => setShowEditModal(true)}
+                className="text-[10px] text-mirc-gray dark:text-gray-600 hover:text-mirc-blue dark:hover:text-blue-400 transition-colors"
+                title="Edit/Delete"
+              >
+                ✏️
+              </button>
+            )}
+
+            {isPartOfThread && (
+              <button
+                onClick={() => setShowThreadView(true)}
+                className="text-[10px] text-mirc-gray dark:text-gray-600 hover:text-mirc-blue dark:hover:text-blue-400 transition-colors"
+                title="View thread"
+              >
+                💬
+              </button>
+            )}
             <button
               onClick={handleReply}
               className="text-[10px] text-mirc-gray dark:text-gray-600 hover:text-mirc-blue dark:hover:text-blue-400 transition-colors"
@@ -286,35 +411,6 @@ export default function Post({ status, isUnread = false }: PostProps) {
               🔖
             </button>
           </div>
-
-          {/* Edit/Delete menu for own posts */}
-          {isOwnPost && (
-            <div ref={menuRef} className="relative flex-shrink-0">
-              <button
-                onClick={() => setShowMenu(!showMenu)}
-                className="text-mirc-gray dark:text-gray-500 hover:text-mirc-text dark:hover:text-gray-300 text-[10px] px-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                title="Options"
-              >
-                ⋯
-              </button>
-              {showMenu && (
-                <div className="absolute right-0 top-full mt-1 bg-white dark:bg-gray-800 border border-mirc-border dark:border-gray-600 rounded shadow-lg z-10 text-[11px] min-w-[100px]">
-                  <button
-                    onClick={() => { handleEdit(); setShowMenu(false); }}
-                    className="block w-full text-left px-3 py-1.5 hover:bg-mirc-panel dark:hover:bg-gray-700 text-mirc-text dark:text-gray-200"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => { handleDelete(); setShowMenu(false); }}
-                    className="block w-full text-left px-3 py-1.5 hover:bg-mirc-panel dark:hover:bg-gray-700 text-mirc-red dark:text-red-400"
-                  >
-                    Delete
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
         </div>
         </div>
       </div>
@@ -385,6 +481,138 @@ export default function Post({ status, isUnread = false }: PostProps) {
             )}
           </div>
         </div>
+      )}
+
+      {/* Link preview on hover */}
+      <LinkPreview
+        card={displayStatus.card}
+        url={!displayStatus.card ? getFirstUrl(displayStatus.content) || undefined : undefined}
+        show={showLinkPreview}
+        position={previewPosition}
+      />
+
+      {/* Edit/Delete modal */}
+      {showEditModal && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowEditModal(false)}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 border-2 border-mirc-border dark:border-gray-600 max-w-md w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Title bar - mIRC style */}
+            <div className="mirc-titlebar text-[11px] flex items-center justify-between bg-blue-700 dark:bg-blue-900 text-white">
+              <span>Post Options</span>
+              <button
+                onClick={() => setShowEditModal(false)}
+                className="hover:bg-blue-800 dark:hover:bg-blue-950 px-2"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4">
+              <div className="space-y-2">
+                <button
+                  onClick={handleEdit}
+                  className="w-full text-left px-4 py-3 bg-mirc-panel dark:bg-gray-700 border border-mirc-border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-650 transition-colors font-mirc text-[12px]"
+                >
+                  <span className="text-mirc-blue dark:text-blue-400">✏️</span> Edit Post
+                </button>
+                <button
+                  onClick={() => { handleDelete(); setShowEditModal(false); }}
+                  className="w-full text-left px-4 py-3 bg-mirc-panel dark:bg-gray-700 border border-mirc-border dark:border-gray-600 hover:bg-red-50 dark:hover:bg-red-950 transition-colors font-mirc text-[12px]"
+                >
+                  <span className="text-mirc-red dark:text-red-400">🗑️</span> Delete Post
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Edit composer modal */}
+      {showEditComposer && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
+          onClick={() => setShowEditComposer(false)}
+        >
+          <div
+            className="bg-white dark:bg-gray-800 border-2 border-mirc-border dark:border-gray-600 max-w-2xl w-full"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Title bar - mIRC style */}
+            <div className="mirc-titlebar text-[11px] flex items-center justify-between bg-blue-700 dark:bg-blue-900 text-white">
+              <span>Edit Post</span>
+              <button
+                onClick={() => setShowEditComposer(false)}
+                className="hover:bg-blue-800 dark:hover:bg-blue-950 px-2"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4">
+              {/* Content warning input */}
+              {editSpoilerText !== '' && (
+                <div className="mb-2">
+                  <input
+                    type="text"
+                    value={editSpoilerText}
+                    onChange={(e) => setEditSpoilerText(e.target.value)}
+                    placeholder="Content warning"
+                    className="w-full p-2 border border-mirc-border dark:border-gray-600 bg-white dark:bg-gray-900 text-mirc-text dark:text-gray-200 font-mirc text-[12px]"
+                  />
+                </div>
+              )}
+
+              {/* Text area */}
+              <textarea
+                value={editContent}
+                onChange={(e) => setEditContent(e.target.value)}
+                placeholder="What's on your mind?"
+                className="w-full p-3 border border-mirc-border dark:border-gray-600 bg-white dark:bg-gray-900 text-mirc-text dark:text-gray-200 font-mirc text-[12px] resize-none"
+                rows={8}
+                autoFocus
+              />
+
+              {/* Character count */}
+              <div className="flex justify-between items-center mt-2">
+                <span className="text-[11px] text-mirc-gray dark:text-gray-500 font-mirc">
+                  {editContent.length}/500
+                </span>
+
+                {/* Action buttons */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowEditComposer(false)}
+                    className="px-4 py-2 bg-mirc-panel dark:bg-gray-700 border border-mirc-border dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-650 transition-colors font-mirc text-[12px]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleSaveEdit}
+                    disabled={!editContent.trim() || isSubmitting}
+                    className="px-4 py-2 bg-mirc-blue dark:bg-blue-600 text-white hover:bg-blue-600 dark:hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors font-mirc text-[12px]"
+                  >
+                    {isSubmitting ? 'Saving...' : 'Save'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Thread view modal */}
+      {showThreadView && (
+        <ThreadView
+          statusId={displayStatus.id}
+          onClose={() => setShowThreadView(false)}
+        />
       )}
     </>
   );

@@ -17,6 +17,20 @@ export default function NotificationsPanel() {
     markNotificationsAsRead,
   } = useStore();
 
+  // Handle ESC key to close panel
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && showNotifications) {
+        setShowNotifications(false);
+      }
+    };
+
+    if (showNotifications) {
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [showNotifications, setShowNotifications]);
+
   useEffect(() => {
     const loadNotifications = async () => {
       if (!accessToken || !instanceUrl || !currentAccount || !showNotifications) return;
