@@ -204,3 +204,10 @@ export interface Suggestion {
   source: string;
   account: Account;
 }
+
+export interface List {
+  id: string;
+  title: string;
+  replies_policy: 'followed' | 'list' | 'none';
+  exclusive: boolean;
+}

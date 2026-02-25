@@ -21,6 +21,7 @@ function App() {
     currentAccount,
     currentTimeline,
     currentTag,
+    currentListId,
     theme,
     showNotifications,
     setCurrentAccount,
@@ -29,6 +30,7 @@ function App() {
     removeFromTimeline,
     setTrendingTags,
     setFollowedTags,
+    setLists,
     setInstance,
     setLoadingTimeline,
     setCurrentTimeline,
@@ -156,6 +158,8 @@ function App() {
           statuses = await api.getPublicTimeline({ local: false });
         } else if (currentTimeline === 'tag' && currentTag) {
           statuses = await api.getTagTimeline(currentTag);
+        } else if (currentTimeline === 'list' && currentListId) {
+          statuses = await api.getListTimeline(currentListId);
         }
         setTimeline(statuses);
         setLoadingTimeline(false);
@@ -168,6 +172,10 @@ function App() {
         const followed = await api.getFollowedTags();
         setFollowedTags(followed);
 
+        // Load lists
+        const userLists = await api.getLists();
+        setLists(userLists);
+
         // Load instance info
         const instance = await api.getInstance();
         setInstance(instance);
@@ -178,7 +186,7 @@ function App() {
     };
 
     loadData();
-  }, [accessToken, instanceUrl, currentAccount, currentTimeline, currentTag, setTimeline, setTrendingTags, setFollowedTags, setInstance, setLoadingTimeline]);
+  }, [accessToken, instanceUrl, currentAccount, currentTimeline, currentTag, currentListId, setTimeline, setTrendingTags, setFollowedTags, setLists, setInstance, setLoadingTimeline]);
 
   // Stream real-time updates
   useEffect(() => {
@@ -194,8 +202,8 @@ function App() {
       const api = getAPI(instanceUrl, accessToken);
 
       // Determine which stream to connect to
-      let streamType: 'user' | 'public' | 'public:local' | 'hashtag' | 'hashtag:local';
-      let tag: string | undefined;
+      let streamType: 'user' | 'public' | 'public:local' | 'hashtag' | 'hashtag:local' | 'list';
+      let tagOrListId: string | undefined;
 
       if (currentTimeline === 'home') {
         streamType = 'user';
@@ -205,7 +213,10 @@ function App() {
         streamType = 'public';
       } else if (currentTimeline === 'tag' && currentTag) {
         streamType = 'hashtag';
-        tag = currentTag;
+        tagOrListId = currentTag;
+      } else if (currentTimeline === 'list' && currentListId) {
+        streamType = 'list';
+        tagOrListId = currentListId;
       } else {
         return; // Unknown timeline type
       }
@@ -223,7 +234,7 @@ function App() {
           console.log('[App] Received delete via WebSocket:', deletedId);
           removeFromTimeline(deletedId);
         },
-        tag
+        tagOrListId
       );
     };
 
@@ -239,7 +250,7 @@ function App() {
         cleanup();
       }
     };
-  }, [accessToken, instanceUrl, currentAccount, currentTimeline, currentTag, appendToTimeline, removeFromTimeline]);
+  }, [accessToken, instanceUrl, currentAccount, currentTimeline, currentTag, currentListId, appendToTimeline, removeFromTimeline]);
 
   // Show login screen if not authenticated
   if (!accessToken || !instanceUrl) {

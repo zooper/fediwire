@@ -17,4 +17,5 @@ export type {
   Relationship,
   SearchResults,
   Suggestion,
+  List,
 } from './mastodon';

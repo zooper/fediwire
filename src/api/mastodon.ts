@@ -7,6 +7,7 @@ import type {
   SearchResults,
   Suggestion,
   Relationship,
+  List,
 } from '../types';
 
 export class MastodonAPI {
@@ -139,6 +140,27 @@ export class MastodonAPI {
   ): Promise<Status[]> {
     const query = new URLSearchParams(params as any).toString();
     return this.fetch<Status[]>(`/api/v1/timelines/tag/${tag}?${query}`);
+  }
+
+  // Lists
+  async getLists(): Promise<List[]> {
+    return this.fetch<List[]>('/api/v1/lists');
+  }
+
+  async getList(id: string): Promise<List> {
+    return this.fetch<List>(`/api/v1/lists/${id}`);
+  }
+
+  async getListTimeline(
+    listId: string,
+    params?: {
+      max_id?: string;
+      since_id?: string;
+      limit?: number;
+    }
+  ): Promise<Status[]> {
+    const query = new URLSearchParams(params as any).toString();
+    return this.fetch<Status[]>(`/api/v1/timelines/list/${listId}?${query}`);
   }
 
   // Statuses
@@ -325,10 +347,10 @@ export class MastodonAPI {
 
   // Streaming
   streamTimeline(
-    stream: 'user' | 'public' | 'public:local' | 'hashtag' | 'hashtag:local',
+    stream: 'user' | 'public' | 'public:local' | 'hashtag' | 'hashtag:local' | 'list',
     onUpdate: (status: Status) => void,
     onDelete?: (id: string) => void,
-    tag?: string
+    tagOrListId?: string
   ): () => void {
     let streamUrl = `${this.baseUrl.replace('https://', 'wss://').replace('http://', 'ws://')}/api/v1/streaming`;
 
@@ -337,8 +359,10 @@ export class MastodonAPI {
       stream: stream,
     });
 
-    if (tag && (stream === 'hashtag' || stream === 'hashtag:local')) {
-      params.append('tag', tag);
+    if (tagOrListId && (stream === 'hashtag' || stream === 'hashtag:local')) {
+      params.append('tag', tagOrListId);
+    } else if (tagOrListId && stream === 'list') {
+      params.append('list', tagOrListId);
     }
 
     const wsUrl = `${streamUrl}?${params.toString()}`;

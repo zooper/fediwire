@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import type { Account, Status, Tag, Notification, Instance } from '../types';
+import type { Account, Status, Tag, Notification, Instance, List } from '../types';
 
-export type TimelineType = 'home' | 'local' | 'federated' | 'tag';
+export type TimelineType = 'home' | 'local' | 'federated' | 'tag' | 'list';
 export type FilterType = 'all' | 'media' | 'links' | 'threads';
 export type Theme = 'light' | 'dark';
 export type FontSize = 'small' | 'medium' | 'large';
@@ -15,6 +15,7 @@ interface AppState {
   // UI State
   currentTimeline: TimelineType;
   currentTag: string | null;
+  currentListId: string | null;
   activeFilter: FilterType;
   theme: Theme;
   fontSize: FontSize;
@@ -28,6 +29,7 @@ interface AppState {
   notifications: Notification[];
   followedTags: Tag[];
   trendingTags: Tag[];
+  lists: List[];
   instance: Instance | null;
 
   // Loading states
@@ -38,7 +40,7 @@ interface AppState {
   setCurrentAccount: (account: Account | null) => void;
   setAccessToken: (token: string | null) => void;
   setInstanceUrl: (url: string | null) => void;
-  setCurrentTimeline: (timeline: TimelineType, tag?: string) => void;
+  setCurrentTimeline: (timeline: TimelineType, tagOrListId?: string) => void;
   setActiveFilter: (filter: FilterType) => void;
   setTheme: (theme: Theme) => void;
   toggleTheme: () => void;
@@ -55,6 +57,7 @@ interface AppState {
   setNotifications: (notifications: Notification[]) => void;
   setFollowedTags: (tags: Tag[]) => void;
   setTrendingTags: (tags: Tag[]) => void;
+  setLists: (lists: List[]) => void;
   setInstance: (instance: Instance | null) => void;
   setLoadingTimeline: (loading: boolean) => void;
   setLoadingNotifications: (loading: boolean) => void;
@@ -68,6 +71,7 @@ export const useStore = create<AppState>((set) => ({
   instanceUrl: localStorage.getItem('mastodon_instance'),
   currentTimeline: 'home',
   currentTag: null,
+  currentListId: null,
   activeFilter: 'all',
   theme: (localStorage.getItem('theme') as Theme) || 'light',
   fontSize: (localStorage.getItem('fontSize') as FontSize) || 'medium',
@@ -79,6 +83,7 @@ export const useStore = create<AppState>((set) => ({
   notifications: [],
   followedTags: [],
   trendingTags: [],
+  lists: [],
   instance: null,
   isLoadingTimeline: false,
   isLoadingNotifications: false,
@@ -104,10 +109,11 @@ export const useStore = create<AppState>((set) => ({
     set({ instanceUrl: url });
   },
 
-  setCurrentTimeline: (timeline, tag) =>
+  setCurrentTimeline: (timeline, tagOrListId) =>
     set({
       currentTimeline: timeline,
-      currentTag: tag || null,
+      currentTag: timeline === 'tag' ? tagOrListId || null : null,
+      currentListId: timeline === 'list' ? tagOrListId || null : null,
       timeline: [] // Clear timeline when switching
     }),
 
@@ -191,6 +197,8 @@ export const useStore = create<AppState>((set) => ({
 
   setTrendingTags: (tags) => set({ trendingTags: tags }),
 
+  setLists: (lists) => set({ lists }),
+
   setInstance: (instance) => set({ instance }),
 
   setLoadingTimeline: (loading) => set({ isLoadingTimeline: loading }),
@@ -208,6 +216,7 @@ export const useStore = create<AppState>((set) => ({
       notifications: [],
       followedTags: [],
       trendingTags: [],
+      lists: [],
       instance: null,
     });
   },

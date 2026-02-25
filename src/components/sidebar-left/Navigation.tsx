@@ -7,6 +7,7 @@ interface NavItem {
   id: TimelineType;
   label: string;
   tag?: string;
+  listId?: string;
 }
 
 const navItems: NavItem[] = [
@@ -19,9 +20,11 @@ export default function Navigation() {
   const {
     currentTimeline,
     currentTag,
+    currentListId,
     setCurrentTimeline,
     followedTags,
     setFollowedTags,
+    lists,
     accessToken,
     instanceUrl
   } = useStore();
@@ -32,7 +35,10 @@ export default function Navigation() {
     if (item.tag) {
       return currentTimeline === 'tag' && currentTag === item.tag;
     }
-    return currentTimeline === item.id && !currentTag;
+    if (item.listId) {
+      return currentTimeline === 'list' && currentListId === item.listId;
+    }
+    return currentTimeline === item.id && !currentTag && !currentListId;
   };
 
   const addChannel = async (e: React.FormEvent) => {
@@ -83,6 +89,31 @@ export default function Navigation() {
           {item.label}
         </button>
       ))}
+
+      {/* Lists section */}
+      {lists.length > 0 && (
+        <>
+          <div className="border-t border-mirc-border dark:border-gray-600 my-2"></div>
+          <div className="text-[10px] text-mirc-gray dark:text-gray-500 px-3 mb-1 uppercase tracking-wide">Lists</div>
+          {lists.map((list) => {
+            const item = { id: 'list' as TimelineType, label: list.title, listId: list.id };
+            return (
+              <button
+                key={list.id}
+                onClick={() => setCurrentTimeline('list', list.id)}
+                style={isActive(item) ? { backgroundColor: '#3182ce', color: '#ffffff' } : {}}
+                className={`w-full text-left px-3 py-2.5 rounded-lg mb-1 transition-all ${
+                  isActive(item)
+                    ? 'font-semibold shadow-sm'
+                    : 'text-mirc-darkgray dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-mirc-text dark:hover:text-gray-200'
+                }`}
+              >
+                📋 {item.label}
+              </button>
+            );
+          })}
+        </>
+      )}
 
       {/* Divider */}
       <div className="border-t border-mirc-border dark:border-gray-600 my-2"></div>
